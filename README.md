@@ -1,6 +1,6 @@
 # Lesen: German reader
 
-PWA for reading German books with in-context translations and flashcards. Works on iPad (Safari → Share → Add to Home Screen).
+PWA for reading German books with in-context translations and flashcards. Live at https://matterda.github.io/lesen/ (deployed by GitHub Actions on every push to `main`). On iPad: open it in Safari → Share → Add to Home Screen.
 
 - Import a DRM-free `.epub` or `.txt`, or paste text.
 - Tap a word, or long-press and drag to select a phrase, then "Translate selection".
@@ -9,7 +9,7 @@ PWA for reading German books with in-context translations and flashcards. Works 
 - "+ Add to flashcards" saves the lemma with its sentence; review is scheduled with FSRS (`ts-fsrs`).
 - Books, words and progress live in the browser (IndexedDB). Export words from Settings as a backup.
 
-Needs an Anthropic API key (Settings), stored only on the device and sent only to api.anthropic.com.
+Default model: Claude Haiku 5.5 (see `evals/compare.ts` for the model comparison). Needs an Anthropic API key (Settings), stored only on the device and sent only to api.anthropic.com.
 
     npm install
     npm run dev        # local dev
