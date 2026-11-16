@@ -150,12 +150,20 @@ export async function importCards(cards: Flashcard[]) {
 }
 
 // --- settings (small, per device)
+export type Theme = "auto" | "light" | "sepia" | "dark";
+export type FontId = "serif" | "literata" | "sans" | "atkinson";
+export type Layout = "scroll" | "pages";
 export interface Settings {
   apiKey: string;
   model: string;
   fontSize: number;
+  theme: Theme;
+  font: FontId;
+  layout: Layout;
 }
-const DEFAULTS: Settings = { apiKey: "", model: "claude-haiku-5-5", fontSize: 21 };
+const DEFAULTS: Settings = {
+  apiKey: "", model: "claude-haiku-5-5", fontSize: 21, theme: "auto", font: "serif", layout: "scroll",
+};
 export function getSettings(): Settings {
   try {
     return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("settings") || "{}") };

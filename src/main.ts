@@ -1,4 +1,6 @@
+import "./fonts.css";
 import "./style.css";
+import { appearanceControls, applyAppearance } from "./appearance";
 import {
   allCards, deleteBook, deleteCard, dueCards, exportAll, getBook, getProgress, getSettings,
   importCards, listBooks, saveBook, saveProgress, saveSettings, type Book, type Flashcard, type Lookup,
@@ -17,6 +19,7 @@ const h = <T extends HTMLElement = HTMLElement>(html: string) => {
 };
 
 navigator.storage?.persist?.(); // ask Safari not to evict the library
+applyAppearance();
 
 // ---------------------------------------------------------------- routing
 let cleanup: (() => void) | null = null;
@@ -131,7 +134,6 @@ function paragraphHtml(text: string, pi: number, known: Set<string>) {
 async function renderReader(id: string) {
   const book = await getBook(id);
   if (!book) return void (location.hash = "#/library");
-  const settings = getSettings();
   const prog = await getProgress(id);
   let chapter = Math.min(prog?.chapter ?? 0, book.chapters.length - 1);
   const known = new Set((await allCards()).map((c) => c.selection.toLowerCase()));
@@ -140,44 +142,114 @@ async function renderReader(id: string) {
     <header class="readbar">
       <a href="#/library" class="icon" aria-label="Back">‹</a>
       <select id="chap">${book.chapters.map((c, i) => `<option value="${i}">${esc(c.title.slice(0, 60))}</option>`).join("")}</select>
-      <button class="icon" id="smaller" aria-label="Smaller text">A−</button>
-      <button class="icon" id="bigger" aria-label="Bigger text">A+</button>
+      <button class="icon aa" id="aa" aria-label="Reading options" aria-expanded="false">Aa</button>
     </header>
+    <div class="aa-panel" id="aap" hidden></div>
     <article class="text" id="text" lang="de"></article>
+    <div class="pageno" id="pageno"></div>
     <button class="btn primary floating" id="selbtn" hidden>Translate selection</button>`;
   const textEl = document.getElementById("text")!;
   const chapSel = document.getElementById("chap") as HTMLSelectElement;
   const selBtn = document.getElementById("selbtn") as HTMLButtonElement;
-  let fontSize = settings.fontSize;
-  const applyFont = () => (textEl.style.fontSize = `${fontSize}px`);
-  applyFont();
-  document.getElementById("smaller")!.onclick = () => { fontSize = Math.max(14, fontSize - 1); applyFont(); saveSettings({ fontSize }); };
-  document.getElementById("bigger")!.onclick = () => { fontSize = Math.min(36, fontSize + 1); applyFont(); saveSettings({ fontSize }); };
+  const pageNo = document.getElementById("pageno")!;
+  const aaBtn = document.getElementById("aa") as HTMLButtonElement;
+  const aaPanel = document.getElementById("aap")!;
 
+  // ---- layout: "scroll" (normal page scroll) or "pages" (CSS columns, one screen per page)
+  let paged = false;
+  let page = 0;
+  let pages = 1;
+  const pageWidth = () => textEl.clientWidth;
+
+  function layout() {
+    paged = getSettings().layout === "pages";
+    document.body.classList.toggle("paged", paged);
+    textEl.style.removeProperty("column-width");
+    textEl.style.removeProperty("column-gap");
+    textEl.style.removeProperty("padding-inline");
+    if (!paged) { pageNo.textContent = ""; return; }
+    const W = pageWidth();
+    const cols = W >= 1000 ? 2 : 1; // two columns per page on a landscape iPad
+    const pad = Math.round(Math.max(24, W * 0.06));
+    // column + gap = W / cols, so one page = exactly W pixels of horizontal scroll
+    textEl.style.paddingInline = `${pad}px`;
+    textEl.style.columnGap = `${2 * pad}px`;
+    textEl.style.columnWidth = `${W / cols - 2 * pad}px`;
+    pages = Math.max(1, Math.round(textEl.scrollWidth / W));
+  }
+  function goPage(n: number) {
+    page = Math.max(0, Math.min(pages - 1, n));
+    textEl.scrollLeft = page * pageWidth();
+    pageNo.textContent = `${page + 1} / ${pages}`;
+    saveSoon();
+  }
+  function pageOf(p: Element) {
+    const r = p.getClientRects()[0];
+    if (!r) return 0;
+    const x = r.left - textEl.getBoundingClientRect().left + textEl.scrollLeft;
+    return Math.floor(x / pageWidth());
+  }
+  function next() {
+    if (page < pages - 1) goPage(page + 1);
+    else if (chapter < book!.chapters.length - 1) showChapter(chapter + 1);
+  }
+  function prev() {
+    if (page > 0) goPage(page - 1);
+    else if (chapter > 0) showChapter(chapter - 1, -1);
+  }
+
+  /** paragraph = -1 means "the end of the chapter" (when paging backwards). */
   function showChapter(i: number, paragraph = 0) {
     chapter = i;
     chapSel.value = String(i);
     const ch = book!.chapters[i];
     textEl.innerHTML =
       ch.paragraphs.map((p, pi) => paragraphHtml(p, pi, known)).join("") +
-      (i < book!.chapters.length - 1 ? `<button class="btn next" id="next">Next chapter ›</button>` : `<p class="end">Ende.</p>`);
-    document.getElementById("next")?.addEventListener("click", () => { showChapter(i + 1); window.scrollTo(0, 0); });
-    const target = textEl.querySelector(`p[data-p="${paragraph}"]`);
-    if (paragraph && target) target.scrollIntoView();
+      (i < book!.chapters.length - 1
+        ? `<button class="btn next" id="next">Next chapter ›</button>`
+        : `<p class="end">Ende.</p>`);
+    document.getElementById("next")?.addEventListener("click", () => showChapter(i + 1));
+    layout();
+    restore(paragraph);
+  }
+  function restore(paragraph: number) {
+    const target = paragraph < 0 ? null : textEl.querySelector(`p[data-p="${paragraph}"]`);
+    if (paged) {
+      textEl.scrollLeft = 0;
+      goPage(paragraph < 0 ? pages - 1 : paragraph && target ? pageOf(target) : 0);
+    } else if (paragraph < 0) window.scrollTo(0, document.body.scrollHeight);
+    else if (paragraph && target) target.scrollIntoView();
     else window.scrollTo(0, 0);
-    save();
+    saveSoon();
   }
   chapSel.onchange = () => showChapter(Number(chapSel.value));
 
   function currentParagraph() {
-    for (const p of textEl.querySelectorAll<HTMLElement>("p[data-p]"))
-      if (p.getBoundingClientRect().bottom > 60) return Number(p.dataset.p);
+    const ps = textEl.querySelectorAll<HTMLElement>("p[data-p]");
+    if (paged) {
+      const box = textEl.getBoundingClientRect();
+      for (const p of ps)
+        for (const r of p.getClientRects()) if (r.right > box.left + 1 && r.left < box.right) return Number(p.dataset.p);
+      return 0;
+    }
+    for (const p of ps) if (p.getBoundingClientRect().bottom > 60) return Number(p.dataset.p);
     return 0;
   }
   const save = () => saveProgress({ bookId: id, chapter, paragraph: currentParagraph(), updatedAt: Date.now() });
   let t: number | undefined;
-  const onScroll = () => { clearTimeout(t); t = window.setTimeout(save, 400); };
-  window.addEventListener("scroll", onScroll, { passive: true });
+  const saveSoon = () => { clearTimeout(t); t = window.setTimeout(save, 400); };
+  window.addEventListener("scroll", saveSoon, { passive: true });
+
+  // re-flow on rotation / resize / font change, keeping the current paragraph in view
+  const relayout = () => { const p = currentParagraph(); layout(); restore(p); };
+  let rt: number | undefined;
+  const onResize = () => { clearTimeout(rt); rt = window.setTimeout(relayout, 150); };
+  window.addEventListener("resize", onResize);
+
+  // ---- reading options panel
+  aaPanel.append(appearanceControls((key) => { if (key !== "theme") relayout(); }));
+  const togglePanel = (open = aaPanel.hidden) => { aaPanel.hidden = !open; aaBtn.setAttribute("aria-expanded", String(open)); };
+  aaBtn.onclick = () => togglePanel();
 
   function contextFor(p: HTMLElement) {
     const pi = Number(p.dataset.p);
@@ -187,18 +259,43 @@ async function renderReader(id: string) {
     return [before, paras[pi], after].filter(Boolean).join("\n\n");
   }
 
-  // Tap a word -> look it up in its sentence
-  textEl.addEventListener("click", (e) => {
-    const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
-    if (!w || !document.getSelection()?.isCollapsed) return;
+  function lookupWord(w: HTMLElement) {
     const s = w.closest<HTMLElement>(".s")!;
     const p = w.closest<HTMLElement>("p")!;
     textEl.querySelectorAll(".hl").forEach((x) => x.classList.remove("hl"));
     w.classList.add("hl");
     // mark the tapped occurrence, in case the word appears twice in the sentence
     const marked = Array.from(s.childNodes, (n) => (n === w ? `⟦${n.textContent}⟧` : n.textContent)).join("").trim();
-    openLookup({ selection: w.textContent!, sentence: s.textContent!.trim(), marked, context: contextFor(p), book, onAdded: (sel) => { known.add(sel.toLowerCase()); w.classList.add("known"); } });
+    openLookup({ selection: w.textContent!, sentence: s.textContent!.trim(), marked, context: contextFor(p), book: book!, onAdded: (sel) => { known.add(sel.toLowerCase()); w.classList.add("known"); } });
+  }
+
+  // Tap: a word -> look it up. In page mode, a tap on the outer edges or on blank space turns the page.
+  textEl.addEventListener("click", (e) => {
+    if (!document.getSelection()?.isCollapsed) return;
+    if (!aaPanel.hidden) return togglePanel(false);
+    const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
+    const x = e.clientX / window.innerWidth;
+    if (w && (!paged || (x > 0.12 && x < 0.88))) return lookupWord(w);
+    if (!paged) return;
+    if (sheet) return closeSheet(); // first tap dismisses the translation
+    if (x < 0.5) prev(); else next();
   });
+
+  // Swipe left/right in page mode
+  let sx = 0, sy = 0;
+  textEl.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  textEl.addEventListener("touchend", (e) => {
+    if (!paged || !document.getSelection()?.isCollapsed) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy)) { if (dx < 0) next(); else prev(); }
+  }, { passive: true });
+
+  const onKey = (e: KeyboardEvent) => {
+    if (!paged || (e.target as HTMLElement).closest("input,select,textarea")) return;
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); next(); }
+    else if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); prev(); }
+  };
+  document.addEventListener("keydown", onKey);
 
   // Select several words (long-press + drag on iPad) -> translate the selection
   const onSel = () => {
@@ -227,15 +324,20 @@ async function renderReader(id: string) {
     const selection = sel.toString().trim().replace(/\s+/g, " ");
     sel.removeAllRanges();
     selBtn.hidden = true;
-    openLookup({ selection, sentence: sentences.join(" "), context: contextFor(p), book, onAdded: (s) => known.add(s.toLowerCase()) });
+    openLookup({ selection, sentence: sentences.join(" "), context: contextFor(p), book: book!, onAdded: (s) => known.add(s.toLowerCase()) });
   };
 
   cleanup = () => {
     save();
-    window.removeEventListener("scroll", onScroll);
+    document.body.classList.remove("paged");
+    window.removeEventListener("scroll", saveSoon);
+    window.removeEventListener("resize", onResize);
+    document.removeEventListener("keydown", onKey);
     document.removeEventListener("selectionchange", onSel);
   };
   showChapter(chapter, prog?.chapter === chapter ? prog.paragraph : 0);
+  await document.fonts?.ready; // column layout depends on the font metrics
+  relayout();
 }
 
 // ---------------------------------------------------------------- lookup sheet
@@ -399,12 +501,14 @@ async function renderSettings(page: HTMLElement) {
       <button class="btn primary">Save</button>
       <span id="saved" class="sub"></span>
     </form>
+    <section class="settings" id="reading"><h2>Reading</h2></section>
     <section class="settings">
       <h2>Backup</h2>
       <p class="sub">Your words live in this browser${persisted ? " (persistent storage granted)" : ""}. Export now and then.</p>
       <div class="row"><button class="btn" id="export">Export words</button>
       <label class="btn">Import words<input type="file" id="import" accept=".json,application/json" hidden></label></div>
     </section>`;
+  page.querySelector("#reading")!.append(appearanceControls());
   page.querySelector<HTMLFormElement>("#f")!.onsubmit = (e) => {
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);

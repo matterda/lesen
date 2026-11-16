@@ -34,7 +34,10 @@ export function importText(text: string, title: string): Book {
     if (HEADING.test(p) && cur.paragraphs.length > 3) {
       chapters.push(cur);
       cur = { title: p, paragraphs: [p] };
-    } else cur.paragraphs.push(p);
+    } else {
+      if (HEADING.test(p) && chapters.length === 0 && cur.title === "Anfang") cur.title = p; // heading right at the start
+      cur.paragraphs.push(p);
+    }
   }
   chapters.push(cur);
   // No headings found: split into chunks so a chapter stays a reasonable page
