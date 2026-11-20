@@ -3,10 +3,10 @@ import "./style.css";
 import { appearanceControls, applyAppearance } from "./appearance";
 import {
   allCards, deleteBook, deleteCard, dueCards, exportAll, getBook, getProgress, getSettings,
-  importCards, listBooks, saveBook, saveProgress, saveSettings, type Book, type Flashcard, type Lookup,
+  importCards, listBooks, saveBook, saveProgress, saveSettings, type Book, type Flashcard,
 } from "./db";
 import { importFile, importText } from "./importer";
-import { describeError, lookup } from "./translate";
+import { describeError, lookup, type PartialLookup } from "./translate";
 import { addCard, grade, GRADES, hasCard, preview } from "./srs";
 
 const app = document.getElementById("app")!;
@@ -348,14 +348,16 @@ function closeSheet() {
   document.querySelectorAll(".hl").forEach((x) => x.classList.remove("hl"));
 }
 
-function lookupHtml(l: Lookup) {
+// Also renders a streamed, still incomplete answer: missing fields are left out.
+function lookupHtml(l: PartialLookup) {
+  const other = (l.other_meanings ?? []).filter((x) => typeof x === "string" && x);
   return `
-    <div class="lemma">${esc(l.lemma)} <span class="pos">${esc(l.part_of_speech)}</span></div>
-    <div class="tr">${esc(l.translation)}</div>
+    <div class="lemma">${esc(l.lemma ?? "")} <span class="pos">${esc(l.part_of_speech ?? "")}</span></div>
+    <div class="tr">${esc(l.translation ?? "")}</div>
     ${l.grammar ? `<div class="gram">${esc(l.grammar)}</div>` : ""}
     ${l.explanation ? `<p class="expl">${esc(l.explanation)}</p>` : ""}
-    ${l.other_meanings.length ? `<p class="other">Also: ${l.other_meanings.map(esc).join(" · ")}</p>` : ""}
-    <p class="sent-tr">${esc(l.sentence_translation)}</p>`;
+    ${other.length ? `<p class="other">Also: ${other.map(esc).join(" · ")}</p>` : ""}
+    ${l.sentence_translation ? `<p class="sent-tr">${esc(l.sentence_translation)}</p>` : ""}`;
 }
 
 async function openLookup(o: { selection: string; sentence: string; marked?: string; context: string; book: Book; onAdded: (sel: string) => void }) {
@@ -369,7 +371,12 @@ async function openLookup(o: { selection: string; sentence: string; marked?: str
   sheet.querySelector<HTMLButtonElement>("#close")!.onclick = closeSheet;
   const body = sheet.querySelector<HTMLElement>(".sheet-body")!;
   try {
-    const l = await lookup({ selection: o.selection, sentence: o.sentence, marked: o.marked, context: o.context, bookTitle: o.book.title });
+    const l = await lookup(
+      { selection: o.selection, sentence: o.sentence, marked: o.marked, context: o.context, bookTitle: o.book.title },
+      (p) => {
+        if (sheet === mine && p.translation) body.innerHTML = lookupHtml(p) + `<div class="spinner small"></div>`;
+      },
+    );
     if (sheet !== mine) return; // closed or replaced meanwhile
     const inDeck = await hasCard(l.lemma);
     body.innerHTML = lookupHtml(l) +

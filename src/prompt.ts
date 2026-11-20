@@ -2,11 +2,12 @@
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 
+// Field order is the order the model writes them in: the gloss comes first so a streamed answer shows it at once.
 export const LookupSchema = z.object({
+  translation: z.string(),
   lemma: z.string(),
   part_of_speech: z.string(),
   grammar: z.string(),
-  translation: z.string(),
   explanation: z.string(),
   other_meanings: z.array(z.string()),
   sentence_translation: z.string(),

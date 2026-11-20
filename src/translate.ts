@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { partialParse } from "@anthropic-ai/sdk/_vendor/partial-json-parser/parser";
 import { lookupParams, type LookupRequest } from "./prompt";
 import { cacheLookup, getCachedLookup, getSettings, type Lookup } from "./db";
 
@@ -16,13 +17,26 @@ async function hash(s: string) {
 
 export type { LookupRequest };
 
-export async function lookup(req: LookupRequest): Promise<Lookup> {
+export type PartialLookup = Partial<Lookup>;
+
+// Streams the answer: onPartial gets the fields written so far (the gloss first), the promise the full lookup.
+export async function lookup(req: LookupRequest, onPartial?: (p: PartialLookup) => void): Promise<Lookup> {
   const { model } = getSettings();
   const key = await hash([model, req.selection, req.sentence].join("\u0000"));
   const cached = await getCachedLookup(key);
   if (cached) return cached.lookup;
 
-  const res = await client().beta.messages.parse(lookupParams(model, req));
+  const stream = client().beta.messages.stream(lookupParams(model, req));
+  if (onPartial)
+    stream.on("text", (_delta, snapshot) => {
+      try {
+        const p = partialParse(snapshot);
+        if (p && typeof p === "object") onPartial(p as PartialLookup);
+      } catch {
+        // not parseable yet; the next delta will be
+      }
+    });
+  const res = await stream.finalMessage();
   if (res.stop_reason === "refusal") throw new Error("The model declined to translate this passage.");
   if (!res.parsed_output) throw new Error("Could not read the model's answer. Try again.");
   await cacheLookup(key, res.parsed_output);
