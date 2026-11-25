@@ -269,16 +269,15 @@ async function renderReader(id: string) {
     openLookup({ selection: w.textContent!, sentence: s.textContent!.trim(), marked, context: contextFor(p), book: book!, onAdded: (sel) => { known.add(sel.toLowerCase()); w.classList.add("known"); } });
   }
 
-  // Tap: a word -> look it up. In page mode, a tap on the outer edges or on blank space turns the page.
+  // Tap: a word -> look it up, wherever it sits. In page mode, a tap on blank space turns the page.
   textEl.addEventListener("click", (e) => {
     if (!document.getSelection()?.isCollapsed) return;
     if (!aaPanel.hidden) return togglePanel(false);
     const w = (e.target as HTMLElement).closest<HTMLElement>(".w");
-    const x = e.clientX / window.innerWidth;
-    if (w && (!paged || (x > 0.12 && x < 0.88))) return lookupWord(w);
+    if (w) return lookupWord(w);
     if (!paged) return;
     if (sheet) return closeSheet(); // first tap dismisses the translation
-    if (x < 0.5) prev(); else next();
+    if (e.clientX < window.innerWidth / 2) prev(); else next();
   });
 
   // Swipe left/right in page mode
