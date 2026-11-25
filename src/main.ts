@@ -352,10 +352,9 @@ function lookupHtml(l: PartialLookup) {
   const other = (l.other_meanings ?? []).filter((x) => typeof x === "string" && x);
   return `
     <div class="lemma">${esc(l.lemma ?? "")} <span class="pos">${esc(l.part_of_speech ?? "")}</span></div>
-    <div class="tr">${esc(l.translation ?? "")}</div>
+    <div class="tr">${esc(l.translation ?? "")}${other.length ? `<span class="other">also: ${other.map(esc).join(" · ")}</span>` : ""}</div>
     ${l.grammar ? `<div class="gram">${esc(l.grammar)}</div>` : ""}
     ${l.explanation ? `<p class="expl">${esc(l.explanation)}</p>` : ""}
-    ${other.length ? `<p class="other">Also: ${other.map(esc).join(" · ")}</p>` : ""}
     ${l.sentence_translation ? `<p class="sent-tr">${esc(l.sentence_translation)}</p>` : ""}`;
 }
 

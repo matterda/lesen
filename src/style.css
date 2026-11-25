@@ -141,7 +141,7 @@ h2 { font-size: 1.1rem; }
 .deck .tr { font-size: 1rem; }
 .gram { font-size: .85rem; color: var(--muted); }
 .expl { margin: .6rem 0; }
-.other { color: var(--muted); font-size: .9rem; margin: .4rem 0; }
+.tr .other { color: var(--muted); font-size: .9rem; margin-left: .6rem; }
 .sent-tr { border-left: 3px solid var(--line); padding-left: .75rem; font-style: italic; margin: .75rem 0 1rem; }
 .err { color: var(--err); }
 .spinner { width: 24px; height: 24px; margin: 1.5rem auto; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
