@@ -1,8 +1,19 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { execSync } from "node:child_process";
+
+// Shown in Settings: the commit the build came from and when it was built.
+const commit = (() => {
+  try { return execSync("git rev-parse --short HEAD").toString().trim(); }
+  catch { return process.env.GITHUB_SHA?.slice(0, 7) ?? "dev"; }
+})();
 
 export default defineConfig({
   base: "./", // works from any sub-path (e.g. GitHub Pages)
+  define: {
+    __APP_COMMIT__: JSON.stringify(commit),
+    __APP_BUILT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     VitePWA({
       registerType: "autoUpdate",

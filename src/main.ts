@@ -513,7 +513,8 @@ async function renderSettings(page: HTMLElement) {
       <p class="sub">Your words live in this browser${persisted ? " (persistent storage granted)" : ""}. Export now and then.</p>
       <div class="row"><button class="btn" id="export">Export words</button>
       <label class="btn">Import words<input type="file" id="import" accept=".json,application/json" hidden></label></div>
-    </section>`;
+    </section>
+    <p class="sub version">Version ${__APP_COMMIT__} · built ${new Date(__APP_BUILT__).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>`;
   page.querySelector("#reading")!.append(appearanceControls());
   page.querySelector<HTMLFormElement>("#f")!.onsubmit = (e) => {
     e.preventDefault();
